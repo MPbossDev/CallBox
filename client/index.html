@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>CallBox</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- TELA 1: início — criar ou entrar em uma sala -->
+  <section id="home-screen" class="screen">
+    <div class="brand">
+      <div class="brand-orb"></div>
+      <h1>CALLBOX</h1>
+      <p class="tagline">Converse. Compartilhe.</p>
+    </div>
+
+    <div class="panel">
+      <label for="room-code-input">Código da sala</label>
+      <input id="room-code-input" type="text" maxlength="8" placeholder="ABC123" autocomplete="off" />
+
+      <button id="btn-join" class="btn btn-primary">Entrar na sala</button>
+      <div class="divider"><span>ou</span></div>
+      <button id="btn-create" class="btn btn-ghost">Criar nova sala</button>
+
+      <p id="home-error" class="error-text hidden"></p>
+    </div>
+
+    <button id="btn-toggle-settings" class="link-btn">Endereço do servidor</button>
+    <div id="settings-box" class="settings-box hidden">
+      <label for="server-url-input">Servidor de sinalização</label>
+      <input id="server-url-input" type="text" placeholder="http://localhost:3000" />
+      <button id="btn-save-server" class="btn btn-small">Salvar</button>
+    </div>
+  </section>
+
+  <!-- TELA 2: nome do usuário -->
+  <section id="name-screen" class="screen hidden">
+    <div class="panel">
+      <h2>Como você quer ser chamado?</h2>
+      <input id="name-input" type="text" maxlength="20" placeholder="Seu nome" autocomplete="off" />
+      <button id="btn-confirm-name" class="btn btn-primary">Entrar</button>
+      <button id="btn-back-name" class="btn btn-ghost">Voltar</button>
+      <p id="name-error" class="error-text hidden"></p>
+    </div>
+  </section>
+
+  <!-- TELA 3: chamada -->
+  <section id="call-screen" class="screen hidden">
+    <header class="call-header">
+      <div class="header-left">
+        <span class="logo-small">CALLBOX</span>
+      </div>
+      <div class="header-right">
+        <span class="room-label">Sala: <strong id="room-code-label"></strong></span>
+        <button id="btn-copy-room" class="btn btn-tiny">Copiar código</button>
+      </div>
+    </header>
+
+    <main class="call-area">
+      <div id="screen-share-view" class="screen-share-view hidden">
+        <video id="screen-share-video" autoplay playsinline></video>
+        <span id="screen-share-owner" class="screen-share-owner"></span>
+      </div>
+
+      <div id="participants-grid" class="participants-grid"></div>
+    </main>
+
+    <footer class="controls-bar">
+      <button id="btn-mic" class="control-btn active" title="Ativar/desativar microfone">
+        <span class="control-icon">🎙</span>
+        <span class="control-label">Mudo</span>
+      </button>
+
+      <button id="btn-screen" class="control-btn" title="Compartilhar tela">
+        <span class="control-icon">🖥</span>
+        <span class="control-label">Tela</span>
+      </button>
+
+      <button id="btn-copy-room-2" class="control-btn" title="Copiar código da sala">
+        <span class="control-icon">📋</span>
+        <span class="control-label">Sala</span>
+      </button>
+
+      <button id="btn-leave" class="control-btn danger" title="Sair da chamada">
+        <span class="control-icon">🔴</span>
+        <span class="control-label">Sair</span>
+      </button>
+    </footer>
+  </section>
+
+  <!-- Modal: seletor de tela/janela para compartilhamento -->
+  <div id="screen-picker-overlay" class="screen-picker-overlay hidden">
+    <div class="screen-picker-box">
+      <h3>O que você quer compartilhar?</h3>
+      <div id="screen-picker-grid" class="screen-picker-grid"></div>
+      <button id="btn-screen-picker-cancel" class="btn btn-ghost">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Elementos de áudio remoto (ocultos) -->
+  <div id="audio-sinks" style="display:none"></div>
+
+  <!-- Notificações -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
