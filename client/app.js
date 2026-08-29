@@ -381,8 +381,50 @@ const btnGotoLogin = document.getElementById('btn-goto-login');
 const accountBadge = document.getElementById('account-badge');
 const accountBadgeUsername = document.getElementById('account-badge-username');
 const accountBadgeId = document.getElementById('account-badge-id');
+const accountBadgeAvatar = document.getElementById('account-badge-avatar');
+const btnOpenAccount = document.getElementById('btn-open-account');
 const btnLogout = document.getElementById('btn-logout');
 const callAccountLabel = document.getElementById('call-account-label');
+
+// v1.2.0 — Central da Conta
+const accountCenterOverlay = document.getElementById('account-center-overlay');
+const accountStateMain = document.getElementById('account-state-main');
+const accountStateUsername = document.getElementById('account-state-username');
+const accountStatePassword = document.getElementById('account-state-password');
+const accountStateDelete = document.getElementById('account-state-delete');
+
+const btnAccountClose = document.getElementById('btn-account-close');
+const accountAvatarLarge = document.getElementById('account-avatar-large');
+const btnChangeAvatar = document.getElementById('btn-change-avatar');
+const avatarFileInput = document.getElementById('avatar-file-input');
+const accountAvatarStatus = document.getElementById('account-avatar-status');
+const accountMainUsername = document.getElementById('account-main-username');
+const accountMainId = document.getElementById('account-main-id');
+const accountMainCreated = document.getElementById('account-main-created');
+
+const btnGotoChangeUsername = document.getElementById('btn-goto-change-username');
+const btnGotoChangePassword = document.getElementById('btn-goto-change-password');
+const btnGotoDeleteAccount = document.getElementById('btn-goto-delete-account');
+
+const btnUsernameBack = document.getElementById('btn-username-back');
+const usernameCurrentLabel = document.getElementById('username-current-label');
+const newUsernameInput = document.getElementById('new-username-input');
+const usernameChangePasswordInput = document.getElementById('username-change-password-input');
+const btnUsernameSubmit = document.getElementById('btn-username-submit');
+const usernameChangeError = document.getElementById('username-change-error');
+
+const btnPasswordBack = document.getElementById('btn-password-back');
+const passwordCurrentInput = document.getElementById('password-current-input');
+const passwordNewInput = document.getElementById('password-new-input');
+const passwordConfirmInput = document.getElementById('password-confirm-input');
+const btnPasswordSubmit = document.getElementById('btn-password-submit');
+const passwordChangeError = document.getElementById('password-change-error');
+
+const btnDeleteBack = document.getElementById('btn-delete-back');
+const deletePasswordInput = document.getElementById('delete-password-input');
+const deleteConfirmInput = document.getElementById('delete-confirm-input');
+const btnDeleteSubmit = document.getElementById('btn-delete-submit');
+const deleteAccountError = document.getElementById('delete-account-error');
 
 if (!isPackagedApp) {
   // Modo dev: não existe verificação de atualização (ver setupAutoUpdater
@@ -468,6 +510,20 @@ function clearAuthErrors() {
   registerError.classList.add('hidden');
 }
 
+// v1.2.0 — preenche um elemento .avatar com a foto do usuário (se houver)
+// ou com as iniciais do nome, reaproveitando o mesmo padrão visual já usado
+// nos cards de participante da call.
+function renderAvatarInto(el, account) {
+  if (!el || !account) return;
+  if (account.avatarDataUrl) {
+    el.style.backgroundImage = `url("${account.avatarDataUrl}")`;
+    el.textContent = '';
+  } else {
+    el.style.backgroundImage = 'none';
+    el.textContent = initials(account.username);
+  }
+}
+
 function updateAccountBadge() {
   if (!currentAccount) {
     accountBadge.classList.add('hidden');
@@ -476,6 +532,7 @@ function updateAccountBadge() {
   }
   accountBadgeUsername.textContent = currentAccount.username;
   accountBadgeId.textContent = currentAccount.id;
+  renderAvatarInto(accountBadgeAvatar, currentAccount);
   accountBadge.classList.remove('hidden');
   if (callAccountLabel) callAccountLabel.textContent = `👤 ${currentAccount.username}`;
 }
@@ -617,6 +674,325 @@ btnLogout.addEventListener('click', async () => {
   showAuthGateState('login');
   authGate.classList.remove('hidden');
   showToast('Você saiu da conta.');
+});
+
+// ---------------------------------------------------------------------------
+// v1.2.0 — Central da Conta ("Minha Conta")
+//
+// Painel dentro da própria janela (mesmo padrão do modal de Configurações
+// da call), usando o sistema de autenticação já existente — nenhuma conta
+// nova, nenhum token novo além do que já é emitido no login/cadastro.
+// Toda validação de segurança (senha atual, dono da conta) é feita no
+// SERVIDOR; aqui só cuidamos de UI e chamadas via apiRequest().
+// ---------------------------------------------------------------------------
+
+function formatCreatedAt(createdAtIso) {
+  if (!createdAtIso) return 'Não disponível (conta anterior a esta atualização)';
+  try {
+    const date = new Date(createdAtIso);
+    if (Number.isNaN(date.getTime())) return 'Não disponível';
+    return date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch (err) {
+    return 'Não disponível';
+  }
+}
+
+function showAccountCenterState(state) {
+  [accountStateMain, accountStateUsername, accountStatePassword, accountStateDelete]
+    .forEach((el) => el.classList.add('hidden'));
+  const map = {
+    main: accountStateMain,
+    username: accountStateUsername,
+    password: accountStatePassword,
+    delete: accountStateDelete,
+  };
+  if (map[state]) map[state].classList.remove('hidden');
+}
+
+function clearAccountCenterErrors() {
+  [usernameChangeError, passwordChangeError, deleteAccountError, accountAvatarStatus]
+    .forEach((el) => el && el.classList.add('hidden'));
+}
+
+function renderAccountCenterMain() {
+  if (!currentAccount) return;
+  renderAvatarInto(accountAvatarLarge, currentAccount);
+  accountMainUsername.textContent = currentAccount.username;
+  accountMainId.textContent = `ID: ${currentAccount.id}`;
+  accountMainCreated.textContent = `Conta criada em: ${formatCreatedAt(currentAccount.createdAt)}`;
+}
+
+function openAccountCenter() {
+  if (!currentAccount) return;
+  clearAccountCenterErrors();
+  newUsernameInput.value = '';
+  usernameChangePasswordInput.value = '';
+  passwordCurrentInput.value = '';
+  passwordNewInput.value = '';
+  passwordConfirmInput.value = '';
+  deletePasswordInput.value = '';
+  deleteConfirmInput.value = '';
+  usernameCurrentLabel.textContent = currentAccount.username;
+  renderAccountCenterMain();
+  showAccountCenterState('main');
+  accountCenterOverlay.classList.remove('hidden');
+}
+
+function closeAccountCenter() {
+  accountCenterOverlay.classList.add('hidden');
+}
+
+btnOpenAccount.addEventListener('click', openAccountCenter);
+if (callAccountLabel) callAccountLabel.addEventListener('click', openAccountCenter);
+btnAccountClose.addEventListener('click', closeAccountCenter);
+accountCenterOverlay.addEventListener('click', (e) => {
+  if (e.target === accountCenterOverlay) closeAccountCenter();
+});
+
+btnGotoChangeUsername.addEventListener('click', () => {
+  clearAccountCenterErrors();
+  usernameCurrentLabel.textContent = currentAccount.username;
+  newUsernameInput.value = '';
+  usernameChangePasswordInput.value = '';
+  showAccountCenterState('username');
+});
+btnGotoChangePassword.addEventListener('click', () => {
+  clearAccountCenterErrors();
+  passwordCurrentInput.value = '';
+  passwordNewInput.value = '';
+  passwordConfirmInput.value = '';
+  showAccountCenterState('password');
+});
+btnGotoDeleteAccount.addEventListener('click', () => {
+  clearAccountCenterErrors();
+  deletePasswordInput.value = '';
+  deleteConfirmInput.value = '';
+  showAccountCenterState('delete');
+});
+
+btnUsernameBack.addEventListener('click', () => { clearAccountCenterErrors(); showAccountCenterState('main'); });
+btnPasswordBack.addEventListener('click', () => { clearAccountCenterErrors(); showAccountCenterState('main'); });
+btnDeleteBack.addEventListener('click', () => { clearAccountCenterErrors(); showAccountCenterState('main'); });
+
+// ---- Alterar username --------------------------------------------------
+
+async function doChangeUsername() {
+  const newUsername = newUsernameInput.value.trim();
+  const currentPassword = usernameChangePasswordInput.value;
+
+  if (!newUsername || !currentPassword) {
+    return showFieldError(usernameChangeError, 'Preencha todos os campos.');
+  }
+
+  usernameChangeError.classList.add('hidden');
+  btnUsernameSubmit.disabled = true;
+  btnUsernameSubmit.textContent = 'Salvando...';
+
+  const { ok, data } = await apiRequest('/api/account/username', {
+    method: 'POST',
+    token: authToken,
+    body: { newUsername, currentPassword },
+  });
+
+  btnUsernameSubmit.disabled = false;
+  btnUsernameSubmit.textContent = 'Salvar alterações';
+
+  if (!ok || !data.success) {
+    return showFieldError(usernameChangeError, data.message || 'Não foi possível concluir a operação. Tente novamente.');
+  }
+
+  // v1.2.0 — o servidor reemite o token com o novo username; atualizamos a
+  // sessão local (memória + armazenamento criptografado) para não derrubar
+  // o login, e refletimos a mudança imediatamente em toda a interface.
+  authToken = data.token;
+  currentAccount = data.account;
+  await sessionSetToken(authToken);
+
+  updateAccountBadge();
+  renderAccountCenterMain();
+  usernameChangePasswordInput.value = '';
+  showToast('Username alterado com sucesso.', 'success');
+  showAccountCenterState('main');
+}
+
+btnUsernameSubmit.addEventListener('click', doChangeUsername);
+[newUsernameInput, usernameChangePasswordInput].forEach((el) => {
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter') doChangeUsername(); });
+});
+
+// ---- Alterar senha -------------------------------------------------------
+
+async function doChangePassword() {
+  const currentPassword = passwordCurrentInput.value;
+  const newPassword = passwordNewInput.value;
+  const confirmPassword = passwordConfirmInput.value;
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return showFieldError(passwordChangeError, 'Preencha todos os campos.');
+  }
+  if (newPassword !== confirmPassword) {
+    return showFieldError(passwordChangeError, 'As senhas não coincidem.');
+  }
+
+  passwordChangeError.classList.add('hidden');
+  btnPasswordSubmit.disabled = true;
+  btnPasswordSubmit.textContent = 'Alterando...';
+
+  const { ok, data } = await apiRequest('/api/account/password', {
+    method: 'POST',
+    token: authToken,
+    body: { currentPassword, newPassword, confirmPassword },
+  });
+
+  btnPasswordSubmit.disabled = false;
+  btnPasswordSubmit.textContent = 'Alterar senha';
+
+  if (!ok || !data.success) {
+    return showFieldError(passwordChangeError, data.message || 'Não foi possível concluir a operação. Tente novamente.');
+  }
+
+  passwordCurrentInput.value = '';
+  passwordNewInput.value = '';
+  passwordConfirmInput.value = '';
+  showToast('Senha alterada com sucesso.', 'success');
+  showAccountCenterState('main');
+}
+
+btnPasswordSubmit.addEventListener('click', doChangePassword);
+[passwordCurrentInput, passwordNewInput, passwordConfirmInput].forEach((el) => {
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter') doChangePassword(); });
+});
+
+// ---- Alterar avatar --------------------------------------------------
+
+const AVATAR_MAX_SOURCE_BYTES = 8 * 1024 * 1024; // 8MB — limite do arquivo escolhido, antes de comprimir
+const AVATAR_TARGET_SIZE = 256; // px — o avatar é redimensionado no client antes de enviar
+
+// Redimensiona/comprime a imagem escolhida via <canvas> antes de enviar,
+// para nunca depender de o usuário já ter uma imagem pequena — e para
+// manter o payload enviado ao servidor sempre pequeno.
+function fileToCompressedAvatarDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Arquivo não parece ser uma imagem válida.'));
+      img.onload = () => {
+        const size = AVATAR_TARGET_SIZE;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // "cover": corta a imagem num quadrado central, sem distorcer.
+        const scale = Math.max(size / img.width, size / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        ctx.drawImage(img, (size - drawW) / 2, (size - drawH) / 2, drawW, drawH);
+
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+btnChangeAvatar.addEventListener('click', () => avatarFileInput.click());
+
+avatarFileInput.addEventListener('change', async () => {
+  const file = avatarFileInput.files && avatarFileInput.files[0];
+  avatarFileInput.value = ''; // permite escolher o mesmo arquivo de novo depois
+  if (!file) return;
+
+  accountAvatarStatus.classList.add('hidden');
+
+  if (!file.type || !file.type.startsWith('image/')) {
+    return showFieldError(accountAvatarStatus, 'Escolha um arquivo de imagem.');
+  }
+  if (file.size > AVATAR_MAX_SOURCE_BYTES) {
+    return showFieldError(accountAvatarStatus, 'Imagem muito grande. Escolha uma imagem menor.');
+  }
+
+  btnChangeAvatar.disabled = true;
+
+  let dataUrl;
+  try {
+    dataUrl = await fileToCompressedAvatarDataUrl(file);
+  } catch (err) {
+    btnChangeAvatar.disabled = false;
+    return showFieldError(accountAvatarStatus, err.message || 'Não foi possível processar a imagem.');
+  }
+
+  const { ok, data } = await apiRequest('/api/account/avatar', {
+    method: 'POST',
+    token: authToken,
+    body: { avatarDataUrl: dataUrl },
+  });
+
+  btnChangeAvatar.disabled = false;
+
+  if (!ok || !data.success) {
+    return showFieldError(accountAvatarStatus, data.message || 'Não foi possível concluir a operação. Tente novamente.');
+  }
+
+  currentAccount = data.account;
+  updateAccountBadge();
+  renderAccountCenterMain();
+  showToast('Avatar atualizado com sucesso.', 'success');
+});
+
+// ---- Excluir conta ---------------------------------------------------
+
+async function doDeleteAccount() {
+  const currentPassword = deletePasswordInput.value;
+  const confirm = deleteConfirmInput.value;
+
+  if (!currentPassword) {
+    return showFieldError(deleteAccountError, 'Preencha todos os campos.');
+  }
+  if (confirm.trim().toUpperCase() !== 'EXCLUIR') {
+    return showFieldError(deleteAccountError, 'Digite EXCLUIR para confirmar.');
+  }
+
+  deleteAccountError.classList.add('hidden');
+  btnDeleteSubmit.disabled = true;
+  btnDeleteSubmit.textContent = 'Excluindo...';
+
+  const { ok, data } = await apiRequest('/api/account/delete', {
+    method: 'POST',
+    token: authToken,
+    body: { currentPassword, confirm },
+  });
+
+  btnDeleteSubmit.disabled = false;
+  btnDeleteSubmit.textContent = 'Excluir minha conta';
+
+  if (!ok || !data.success) {
+    return showFieldError(deleteAccountError, data.message || 'Não foi possível concluir a operação. Tente novamente.');
+  }
+
+  // Mesma limpeza de sessão do logout: encerra a sessão local, fecha a
+  // Central da Conta e devolve a pessoa para a tela de login — a conta
+  // excluída não existe mais no servidor, então nenhum token antigo volta
+  // a funcionar (ver requireAuth/verifySessionToken no server.js).
+  closeAccountCenter();
+  await sessionClearToken();
+  authToken = null;
+  currentAccount = null;
+  updateAccountBadge();
+  loginUsernameInput.value = '';
+  loginPasswordInput.value = '';
+  clearAuthErrors();
+  showAuthGateState('login');
+  authGate.classList.remove('hidden');
+  showToast('Conta excluída com sucesso.');
+}
+
+btnDeleteSubmit.addEventListener('click', doDeleteAccount);
+[deletePasswordInput, deleteConfirmInput].forEach((el) => {
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter') doDeleteAccount(); });
 });
 
 // ---------------------------------------------------------------------------
