@@ -1,6 +1,6 @@
 {
   "name": "callbox",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "CallBox - chamadas de voz e compartilhamento de tela para 2 ou 3 pessoas",
   "main": "electron/main.js",
   "author": "Você",
