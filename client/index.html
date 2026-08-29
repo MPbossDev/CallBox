@@ -2,22 +2,32 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>CallBox</title>
+  <title>CONCORD</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <!-- TELA 1: início — criar ou entrar em uma sala -->
-  <section id="home-screen" class="screen">
+  <section id="home-screen" class="screen hidden">
+    <!-- v1.1.0 — quem está logado, com opção de sair da conta -->
+    <div id="account-badge" class="account-badge hidden">
+      <span>👤 <strong id="account-badge-username"></strong></span>
+      <span id="account-badge-id" class="account-badge-id"></span>
+      <button id="btn-logout" class="link-btn">Sair da conta</button>
+    </div>
+
     <div class="brand">
       <div class="brand-orb"></div>
-      <h1>CALLBOX</h1>
+      <h1>CONCORD</h1>
       <p class="tagline">Converse. Compartilhe.</p>
     </div>
 
     <div class="panel">
       <label for="room-code-input">Código da sala</label>
-      <input id="room-code-input" type="text" maxlength="8" placeholder="ABC123" autocomplete="off" />
+      <div class="code-input-row">
+        <input id="room-code-input" type="text" maxlength="8" placeholder="ABC123" autocomplete="off" />
+        <button id="btn-paste-room" type="button" class="btn btn-tiny" title="Colar código da área de transferência">Colar</button>
+      </div>
 
       <button id="btn-join" class="btn btn-primary">Entrar na sala</button>
       <div class="divider"><span>ou</span></div>
@@ -39,6 +49,24 @@
     <div class="panel">
       <h2>Como você quer ser chamado?</h2>
       <input id="name-input" type="text" maxlength="20" placeholder="Seu nome" autocomplete="off" />
+
+      <div class="audio-devices-row">
+        <div class="audio-device-field">
+          <label for="mic-select">🎙️ Microfone</label>
+          <select id="mic-select"></select>
+        </div>
+        <div class="audio-device-field">
+          <label for="speaker-select">🔊 Saída de áudio</label>
+          <select id="speaker-select"></select>
+        </div>
+      </div>
+
+      <div class="mic-test-row">
+        <div class="mic-meter"><div id="mic-meter-fill" class="mic-meter-fill"></div></div>
+        <button id="btn-test-sound" type="button" class="btn btn-tiny">Tocar som de teste</button>
+      </div>
+      <p id="mic-test-status" class="mic-test-status">Testando microfone...</p>
+
       <button id="btn-confirm-name" class="btn btn-primary">Entrar</button>
       <button id="btn-back-name" class="btn btn-ghost">Voltar</button>
       <p id="name-error" class="error-text hidden"></p>
@@ -49,18 +77,34 @@
   <section id="call-screen" class="screen hidden">
     <header class="call-header">
       <div class="header-left">
-        <span class="logo-small">CALLBOX</span>
+        <span class="logo-small">CONCORD</span>
+        <span id="call-account-label" class="room-label"></span>
+        <span id="call-duration" class="call-duration">00:00:00</span>
       </div>
       <div class="header-right">
+        <span id="connection-status" class="connection-status status-green">🟢 Conectado</span>
         <span class="room-label">Sala: <strong id="room-code-label"></strong></span>
+        <select id="mic-select-call" class="mic-select-call" title="Trocar microfone"></select>
+        <button id="btn-settings" class="btn btn-tiny" title="Configurações">⚙️</button>
         <button id="btn-copy-room" class="btn btn-tiny">Copiar código</button>
       </div>
     </header>
 
+    <div id="enable-audio-banner" class="enable-audio-banner hidden">
+      <span>Não foi possível iniciar o áudio automaticamente neste navegador.</span>
+      <button id="btn-enable-audio" class="btn btn-small">Ativar áudio</button>
+    </div>
+
     <main class="call-area">
+      <div id="screen-shares-panel" class="screen-shares-panel hidden">
+        <h4>Compartilhamentos</h4>
+        <div id="screen-shares-list" class="screen-shares-list"></div>
+      </div>
+
       <div id="screen-share-view" class="screen-share-view hidden">
         <video id="screen-share-video" autoplay playsinline></video>
         <span id="screen-share-owner" class="screen-share-owner"></span>
+        <button id="btn-toggle-share-audio" class="btn btn-tiny screen-share-audio-toggle hidden" title="Ativar/desativar áudio desta tela">🔊</button>
       </div>
 
       <div id="participants-grid" class="participants-grid"></div>
@@ -98,12 +142,224 @@
     </div>
   </div>
 
+  <!-- Modal: escolha de qualidade ao iniciar o compartilhamento de tela -->
+  <div id="screen-quality-overlay" class="screen-picker-overlay hidden">
+    <div class="screen-picker-box quality-box">
+      <h3>🖥️ Compartilhar tela</h3>
+      <p class="quality-subtitle">Escolha a qualidade:</p>
+
+      <div class="quality-options">
+        <button type="button" id="btn-quality-hd30" class="quality-btn">
+          <span class="quality-btn-emoji">🟢</span>
+          <span class="quality-btn-text">
+            <span class="quality-btn-title">30 FPS — HD</span>
+            <span class="quality-btn-desc">Prioriza estabilidade e menor consumo de internet</span>
+          </span>
+        </button>
+
+        <button type="button" id="btn-quality-fhd60" class="quality-btn">
+          <span class="quality-btn-emoji">🔵</span>
+          <span class="quality-btn-text">
+            <span class="quality-btn-title">60 FPS — FHD</span>
+            <span class="quality-btn-desc">Prioriza maior fluidez e qualidade de imagem</span>
+          </span>
+        </button>
+      </div>
+
+      <button id="btn-quality-cancel" class="btn btn-ghost">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- v1.0.9 — painel de configurações da call (áudio + binds) -->
+  <div id="settings-overlay" class="screen-picker-overlay hidden">
+    <div class="screen-picker-box settings-modal-box">
+      <div class="settings-modal-header">
+        <h3>⚙️ Configurações</h3>
+        <button id="btn-settings-close" class="btn btn-tiny" title="Fechar">✕</button>
+      </div>
+
+      <div class="settings-section">
+        <h4>🎙️ Áudio</h4>
+        <div class="audio-devices-row">
+          <div class="audio-device-field">
+            <label for="settings-mic-select">Microfone</label>
+            <select id="settings-mic-select"></select>
+          </div>
+          <div class="audio-device-field">
+            <label for="settings-speaker-select">Saída de áudio</label>
+            <select id="settings-speaker-select"></select>
+          </div>
+        </div>
+        <button id="btn-test-sound-settings" type="button" class="btn btn-tiny">Tocar som de teste</button>
+      </div>
+
+      <div class="settings-section">
+        <h4>⌨️ Binds</h4>
+
+        <div class="bind-row">
+          <span class="bind-row-label">Mutar/desmutar microfone</span>
+          <div class="bind-row-controls">
+            <button type="button" id="btn-bind-mute" class="bind-key-btn"></button>
+            <button type="button" id="btn-bind-mute-reset" class="btn btn-tiny bind-reset-btn" title="Restaurar padrão">↺</button>
+          </div>
+        </div>
+
+        <div class="bind-row">
+          <span class="bind-row-label">Iniciar/parar compartilhamento de tela</span>
+          <div class="bind-row-controls">
+            <button type="button" id="btn-bind-screen" class="bind-key-btn"></button>
+            <button type="button" id="btn-bind-screen-reset" class="btn btn-tiny bind-reset-btn" title="Restaurar padrão">↺</button>
+          </div>
+        </div>
+
+        <p class="bind-hint">Clique no atalho e pressione a nova combinação de teclas. Esc cancela.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.0.9 — controle de volume individual por participante (clique esquerdo no card) -->
+  <div id="volume-popover" class="volume-popover hidden">
+    <div class="volume-popover-name" id="volume-popover-name"></div>
+    <label class="volume-popover-label">🔊 Volume</label>
+    <div class="volume-popover-row">
+      <input type="range" id="volume-popover-slider" min="0" max="100" value="100" />
+      <span id="volume-popover-percent" class="volume-popover-percent">100%</span>
+    </div>
+    <button type="button" id="volume-popover-mute" class="btn btn-tiny volume-popover-mute-btn">🔇 Silenciar</button>
+  </div>
+
   <!-- Elementos de áudio remoto (ocultos) -->
   <div id="audio-sinks" style="display:none"></div>
+
+  <!-- v1.1.0 — Gate de autenticação obrigatório (contas de usuário).
+       Segue o mesmo padrão do gate de atualização abaixo: cobre a tela
+       inteira, não tem "Depois"/"Pular"/"Fechar", não fecha com clique fora,
+       e só some quando existe uma sessão válida (login/cadastro feitos
+       agora, ou uma sessão salva que ainda é válida). Enquanto está visível,
+       Home/criar sala/entrar em sala ficam inacessíveis por trás dela. -->
+  <div id="auth-gate" class="update-gate hidden">
+    <div class="update-gate-box auth-gate-box">
+
+      <div class="brand auth-brand">
+        <div class="brand-orb"></div>
+        <h1>CALLBOX</h1>
+      </div>
+
+      <div id="auth-state-checking" class="update-state hidden">
+        <div class="update-spinner"></div>
+        <p>Verificando sessão...</p>
+      </div>
+
+      <div id="auth-state-login" class="update-state hidden">
+        <h2>Entrar na conta</h2>
+
+        <div class="panel auth-panel">
+          <label for="login-username-input">Nome de usuário</label>
+          <input id="login-username-input" type="text" maxlength="20" autocomplete="username" placeholder="Nome de usuário" />
+
+          <label for="login-password-input">Senha</label>
+          <input id="login-password-input" type="password" autocomplete="current-password" placeholder="Senha" />
+
+          <button id="btn-login-submit" class="btn btn-primary">ENTRAR</button>
+
+          <p id="login-error" class="error-text hidden"></p>
+        </div>
+
+        <p class="auth-switch-text">
+          Não tem conta?
+          <button id="btn-goto-register" type="button" class="link-btn">Criar conta</button>
+        </p>
+      </div>
+
+      <div id="auth-state-register" class="update-state hidden">
+        <h2>Criar sua conta</h2>
+
+        <div class="panel auth-panel">
+          <label for="register-username-input">Nome de usuário</label>
+          <input id="register-username-input" type="text" maxlength="20" autocomplete="username" placeholder="Nome de usuário" />
+
+          <label for="register-password-input">Senha</label>
+          <input id="register-password-input" type="password" autocomplete="new-password" placeholder="Senha" />
+
+          <label for="register-confirm-input">Confirmar senha</label>
+          <input id="register-confirm-input" type="password" autocomplete="new-password" placeholder="Confirmar senha" />
+
+          <button id="btn-register-submit" class="btn btn-primary">CRIAR CONTA</button>
+
+          <p id="register-error" class="error-text hidden"></p>
+        </div>
+
+        <p class="auth-switch-text">
+          Já possui uma conta?
+          <button id="btn-goto-login" type="button" class="link-btn">Entrar</button>
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Gate de atualização obrigatória (electron-updater + GitHub Releases).
+       Fica por cima de TUDO (inclusive da tela inicial) e não tem nenhuma
+       forma de fechar/ignorar — só some quando não há atualização ou depois
+       que ela é instalada e o app reinicia. -->
+  <div id="update-gate" class="update-gate hidden">
+    <div class="update-gate-box">
+
+      <div id="update-state-checking" class="update-state hidden">
+        <div class="update-spinner"></div>
+        <p>Verificando atualizações...</p>
+      </div>
+
+      <div id="update-state-available" class="update-state hidden">
+        <div class="update-icon">🚀</div>
+        <h2>Nova versão disponível</h2>
+        <p class="update-version-line">
+          Versão atual: <strong id="update-current-version"></strong><br />
+          Nova versão: <strong id="update-new-version"></strong>
+        </p>
+        <div class="update-changelog">
+          <h4>O que há de novo</h4>
+          <div id="update-changelog-body" class="update-changelog-body"></div>
+        </div>
+        <p class="update-mandatory-note">Para continuar usando o CallBox, é necessário instalar esta atualização.</p>
+        <button id="btn-install-update" class="btn btn-primary update-btn-primary">Instalar agora</button>
+      </div>
+
+      <div id="update-state-downloading" class="update-state hidden">
+        <div class="update-icon">⬇️</div>
+        <h2>Baixando atualização</h2>
+        <p id="update-downloading-version" class="update-version-line"></p>
+        <div class="update-progress-bar"><div id="update-progress-fill" class="update-progress-fill"></div></div>
+        <p id="update-progress-label" class="update-progress-label">0%</p>
+        <p class="update-mandatory-note">Não feche o CallBox.</p>
+      </div>
+
+      <div id="update-state-installing" class="update-state hidden">
+        <div class="update-icon">⚙️</div>
+        <h2>Instalando atualização</h2>
+        <p>Aguarde. O CallBox será reiniciado automaticamente.</p>
+      </div>
+
+      <div id="update-state-restarting" class="update-state hidden">
+        <div class="update-icon">✅</div>
+        <h2>Atualização concluída!</h2>
+        <p>Reiniciando CallBox...</p>
+      </div>
+
+      <div id="update-state-error" class="update-state hidden">
+        <div class="update-icon">⚠️</div>
+        <h2>Não foi possível atualizar</h2>
+        <p>O download da atualização falhou. Verifique sua conexão com a internet e tente novamente.</p>
+        <button id="btn-retry-update" class="btn btn-primary update-btn-primary">Tentar novamente</button>
+      </div>
+
+    </div>
+  </div>
 
   <!-- Notificações -->
   <div id="toast" class="toast hidden"></div>
 
+  <div id="app-version"></div>
   <script src="app.js"></script>
 </body>
 </html>
