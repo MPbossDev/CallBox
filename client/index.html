@@ -11,8 +11,13 @@
   <section id="home-screen" class="screen hidden">
     <!-- v1.1.0 — quem está logado, com opção de sair da conta -->
     <div id="account-badge" class="account-badge hidden">
-      <span>👤 <strong id="account-badge-username"></strong></span>
-      <span id="account-badge-id" class="account-badge-id"></span>
+      <button id="btn-open-account" class="account-badge-open" title="Minha conta">
+        <span id="account-badge-avatar" class="avatar account-badge-avatar"></span>
+        <span class="account-badge-text">
+          <strong id="account-badge-username"></strong>
+          <span id="account-badge-id" class="account-badge-id"></span>
+        </span>
+      </button>
       <button id="btn-logout" class="link-btn">Sair da conta</button>
     </div>
 
@@ -78,7 +83,7 @@
     <header class="call-header">
       <div class="header-left">
         <span class="logo-small">CONCORD</span>
-        <span id="call-account-label" class="room-label"></span>
+        <button id="call-account-label" class="room-label call-account-label-btn" title="Minha conta"></button>
         <span id="call-duration" class="call-duration">00:00:00</span>
       </div>
       <div class="header-right">
@@ -230,6 +235,118 @@
 
   <!-- Elementos de áudio remoto (ocultos) -->
   <div id="audio-sinks" style="display:none"></div>
+
+  <!-- v1.2.0 — Central da Conta (perfil/configurações da própria conta).
+       Segue o mesmo padrão visual do painel de Configurações (⚙️) da call:
+       .screen-picker-overlay + .settings-modal-box, com "estados" internos
+       (mesma técnica do auth-gate) para as sub-telas de alterar
+       username/senha/avatar e excluir conta. -->
+  <div id="account-center-overlay" class="screen-picker-overlay hidden">
+    <div class="screen-picker-box settings-modal-box account-center-box">
+
+      <!-- Estado: tela principal -->
+      <div id="account-state-main" class="account-state hidden">
+        <div class="settings-modal-header">
+          <h3>👤 Minha Conta</h3>
+          <button id="btn-account-close" class="btn btn-tiny" title="Fechar">✕</button>
+        </div>
+
+        <div class="account-main-info">
+          <div class="account-avatar-wrap">
+            <span id="account-avatar-large" class="avatar account-avatar-large"></span>
+            <button id="btn-change-avatar" class="btn btn-tiny account-avatar-edit-btn" title="Alterar avatar">✏️</button>
+            <input id="avatar-file-input" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />
+          </div>
+          <div class="account-main-text">
+            <p id="account-main-username" class="account-main-username"></p>
+            <p id="account-main-id" class="account-main-id"></p>
+            <p id="account-main-created" class="account-main-created"></p>
+          </div>
+        </div>
+
+        <p id="account-avatar-status" class="error-text hidden"></p>
+
+        <div class="account-actions">
+          <button id="btn-goto-change-username" class="btn btn-ghost">Alterar username</button>
+          <button id="btn-goto-change-password" class="btn btn-ghost">Alterar senha</button>
+        </div>
+
+        <div class="account-danger-zone">
+          <h4>Zona de risco</h4>
+          <button id="btn-goto-delete-account" class="btn btn-danger">Excluir conta</button>
+        </div>
+      </div>
+
+      <!-- Estado: alterar username -->
+      <div id="account-state-username" class="account-state hidden">
+        <div class="settings-modal-header">
+          <h3>Alterar username</h3>
+          <button id="btn-username-back" class="btn btn-tiny" title="Voltar">←</button>
+        </div>
+
+        <div class="panel auth-panel account-sub-panel">
+          <label>Username atual</label>
+          <p id="username-current-label" class="account-current-value"></p>
+
+          <label for="new-username-input">Novo username</label>
+          <input id="new-username-input" type="text" maxlength="20" autocomplete="off" placeholder="Novo username" />
+
+          <label for="username-change-password-input">Senha atual</label>
+          <input id="username-change-password-input" type="password" autocomplete="current-password" placeholder="Senha atual" />
+
+          <button id="btn-username-submit" class="btn btn-primary">Salvar alterações</button>
+
+          <p id="username-change-error" class="error-text hidden"></p>
+        </div>
+      </div>
+
+      <!-- Estado: alterar senha -->
+      <div id="account-state-password" class="account-state hidden">
+        <div class="settings-modal-header">
+          <h3>Alterar senha</h3>
+          <button id="btn-password-back" class="btn btn-tiny" title="Voltar">←</button>
+        </div>
+
+        <div class="panel auth-panel account-sub-panel">
+          <label for="password-current-input">Senha atual</label>
+          <input id="password-current-input" type="password" autocomplete="current-password" placeholder="Senha atual" />
+
+          <label for="password-new-input">Nova senha</label>
+          <input id="password-new-input" type="password" autocomplete="new-password" placeholder="Nova senha" />
+
+          <label for="password-confirm-input">Confirmar nova senha</label>
+          <input id="password-confirm-input" type="password" autocomplete="new-password" placeholder="Confirmar nova senha" />
+
+          <button id="btn-password-submit" class="btn btn-primary">Alterar senha</button>
+
+          <p id="password-change-error" class="error-text hidden"></p>
+        </div>
+      </div>
+
+      <!-- Estado: excluir conta -->
+      <div id="account-state-delete" class="account-state hidden">
+        <div class="settings-modal-header">
+          <h3>Excluir conta</h3>
+          <button id="btn-delete-back" class="btn btn-tiny" title="Voltar">←</button>
+        </div>
+
+        <div class="panel auth-panel account-sub-panel account-delete-panel">
+          <p class="account-delete-warning">⚠️ Essa ação é permanente e não pode ser desfeita.</p>
+
+          <label for="delete-password-input">Senha atual</label>
+          <input id="delete-password-input" type="password" autocomplete="current-password" placeholder="Senha atual" />
+
+          <label for="delete-confirm-input">Digite EXCLUIR para confirmar</label>
+          <input id="delete-confirm-input" type="text" autocomplete="off" placeholder="EXCLUIR" />
+
+          <button id="btn-delete-submit" class="btn btn-danger">Excluir minha conta</button>
+
+          <p id="delete-account-error" class="error-text hidden"></p>
+        </div>
+      </div>
+
+    </div>
+  </div>
 
   <!-- v1.1.0 — Gate de autenticação obrigatório (contas de usuário).
        Segue o mesmo padrão do gate de atualização abaixo: cobre a tela
