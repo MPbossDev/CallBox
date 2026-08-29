@@ -33,7 +33,10 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 const MAX_USERS_PER_ROOM = 3;
 
-app.use(express.json());
+// v1.2.0 — limite elevado para caber o avatar (base64) enviado pela Central
+// da Conta. Continua sendo um valor pequeno e proposital: o CallBox não é
+// um serviço público, é o próprio cliente Electron falando com seu servidor.
+app.use(express.json({ limit: '2mb' }));
 
 // CORS manual e minimalista para as rotas REST de contas (cadastro/login/
 // sessão). Evita adicionar mais uma dependência (`cors`) só para isso — o
@@ -107,8 +110,37 @@ function saveAccounts(data) {
   fs.renameSync(tmpFile, ACCOUNTS_FILE);
 }
 
-// Chave: nome de usuário em minúsculas -> { id, username, passwordHash, createdAt }
+// Chave: nome de usuário em minúsculas ->
+//   { id, username, passwordHash, createdAt, avatarDataUrl }
 let accounts = loadAccounts();
+
+// ---------------------------------------------------------------------------
+// v1.2.0 — Migração segura de contas antigas (V1.1.0)
+//
+// Contas criadas antes da V1.2.0 não têm `createdAt` nem `avatarDataUrl`.
+// NUNCA inventamos uma data de criação falsa para essas contas — apenas
+// garantimos que o campo exista como `null`, e o client mostra "não
+// disponível" nesse caso. Isso roda uma única vez, na inicialização do
+// servidor, e só grava em disco se algo realmente mudou.
+// ---------------------------------------------------------------------------
+(function migrateAccountsIfNeeded() {
+  let changed = false;
+  for (const key of Object.keys(accounts)) {
+    const acc = accounts[key];
+    if (!('createdAt' in acc)) {
+      acc.createdAt = null; // desconhecida — nunca inventada
+      changed = true;
+    }
+    if (!('avatarDataUrl' in acc)) {
+      acc.avatarDataUrl = null;
+      changed = true;
+    }
+  }
+  if (changed) {
+    saveAccounts(accounts);
+    console.log('[contas] Migração v1.2.0 aplicada a contas existentes (createdAt/avatarDataUrl).');
+  }
+})();
 
 function generateAccountId() {
   let id;
@@ -136,7 +168,12 @@ function validatePassword(password) {
 
 // Nunca devolve passwordHash para o cliente.
 function publicAccount(acc) {
-  return { id: acc.id, username: acc.username };
+  return {
+    id: acc.id,
+    username: acc.username,
+    createdAt: acc.createdAt || null,
+    avatarDataUrl: acc.avatarDataUrl || null,
+  };
 }
 
 function signSession(acc) {
@@ -160,6 +197,76 @@ function verifySessionToken(token) {
   if (!account || account.id !== payload.sub) return null;
 
   return account;
+}
+
+// ---------------------------------------------------------------------------
+// v1.2.0 — Middleware de autenticação para as rotas da Central da Conta
+//
+// TODA operação de conta (ver rotas /api/account/* abaixo) passa por aqui.
+// A conta que sofre a operação é SEMPRE a que está codificada no próprio
+// token de sessão (`req.account`) — nunca um id/username enviado no corpo
+// da requisição. É isso que impede um usuário autenticado de alterar ou
+// excluir a conta de outra pessoa apenas trocando um campo no request.
+// ---------------------------------------------------------------------------
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  const account = token ? verifySessionToken(token) : null;
+  if (!account) {
+    return res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+  }
+
+  // Chave real em `accounts` (username em minúsculas) — usada pelas rotas
+  // para localizar/mutar o registro correto sem depender de nada vindo do client.
+  req.accountKey = String(account.username).toLowerCase();
+  req.account = account;
+  next();
+}
+
+// ---------------------------------------------------------------------------
+// v1.2.0 — Avatar: validação de tipo/tamanho e checagem de "magic bytes"
+//
+// O avatar é recebido como data URL (base64) e persistido dentro do próprio
+// accounts.json — mesmo mecanismo de armazenamento já usado para o resto da
+// conta, sem introduzir um serviço de storage novo. Limite pensado para um
+// app de 2-3 amigos, não para uso público.
+// ---------------------------------------------------------------------------
+const AVATAR_MAX_BYTES = 700 * 1024; // ~700KB decodificado
+const AVATAR_MAGIC_BYTES = {
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+  'image/jpeg': [0xff, 0xd8, 0xff],
+  'image/webp': [0x52, 0x49, 0x46, 0x46], // 'RIFF' (WEBP confirmado abaixo)
+};
+
+function validateAvatarDataUrl(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return { error: 'Nenhuma imagem enviada.' };
+
+  const match = /^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl.trim());
+  if (!match) return { error: 'Formato de imagem não suportado.' };
+
+  const mime = match[1] === 'image/jpg' ? 'image/jpeg' : match[1];
+  let buffer;
+  try {
+    buffer = Buffer.from(match[2], 'base64');
+  } catch (err) {
+    return { error: 'Não foi possível processar a imagem.' };
+  }
+
+  if (buffer.length === 0) return { error: 'Imagem vazia.' };
+  if (buffer.length > AVATAR_MAX_BYTES) {
+    return { error: 'Imagem muito grande. Escolha uma imagem menor.' };
+  }
+
+  const magic = AVATAR_MAGIC_BYTES[mime];
+  const headerOk = magic && magic.every((byte, i) => buffer[i] === byte);
+  const webpOk = mime === 'image/webp' && headerOk && buffer.slice(8, 12).toString('ascii') === 'WEBP';
+
+  if (!headerOk || (mime === 'image/webp' && !webpOk)) {
+    return { error: 'Arquivo não parece ser uma imagem válida.' };
+  }
+
+  return { mime, buffer };
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +348,138 @@ app.get('/api/auth/session', (req, res) => {
   if (!account) return res.status(401).json({ valid: false });
 
   res.json({ valid: true, account: publicAccount(account) });
+});
+
+// ---------------------------------------------------------------------------
+// v1.2.0 — Rotas REST da Central da Conta
+//
+// Todas exigem `requireAuth` e operam SEMPRE sobre `req.accountKey`/
+// `req.account` (derivados do token), nunca sobre um id/username enviado
+// pelo client. Nenhuma delas cria uma segunda conta ou um sistema de
+// autenticação paralelo — reaproveitam accounts/JWT_SECRET já existentes.
+// ---------------------------------------------------------------------------
+
+app.get('/api/account/me', requireAuth, (req, res) => {
+  const account = accounts[req.accountKey];
+  if (!account) return res.status(401).json({ success: false, message: 'Conta não encontrada.' });
+  res.json({ success: true, account: publicAccount(account) });
+});
+
+app.post('/api/account/username', requireAuth, (req, res) => {
+  const { newUsername, currentPassword } = req.body || {};
+  const account = accounts[req.accountKey];
+
+  if (!account) return res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+  if (!newUsername || !currentPassword) {
+    return res.status(400).json({ success: false, message: 'Preencha todos os campos.' });
+  }
+
+  if (!bcrypt.compareSync(String(currentPassword), account.passwordHash)) {
+    return res.status(401).json({ success: false, message: 'Senha atual incorreta.' });
+  }
+
+  const trimmedUsername = String(newUsername).trim();
+  const usernameError = validateUsername(trimmedUsername);
+  if (usernameError) return res.status(400).json({ success: false, message: usernameError });
+
+  const newKey = trimmedUsername.toLowerCase();
+
+  // Mesmas regras do cadastro: nome já em uso por OUTRA conta é bloqueado;
+  // manter exatamente o mesmo nome (só mudando caixa, por ex.) é permitido.
+  if (newKey !== req.accountKey && accounts[newKey]) {
+    return res.status(409).json({ success: false, message: 'Username já está em uso.' });
+  }
+
+  account.username = trimmedUsername;
+
+  if (newKey !== req.accountKey) {
+    delete accounts[req.accountKey];
+    accounts[newKey] = account;
+  }
+  saveAccounts(accounts);
+
+  console.log(`[contas] Username alterado: ${req.accountKey} -> ${newKey} (${account.id})`);
+
+  // Reemite a sessão com o novo username (o token antigo referenciava a
+  // chave anterior e deixaria de ser válido no próximo verifySessionToken).
+  const token = signSession(account);
+  res.json({ success: true, message: 'Username alterado com sucesso.', token, account: publicAccount(account) });
+});
+
+app.post('/api/account/password', requireAuth, (req, res) => {
+  const { currentPassword, newPassword, confirmPassword } = req.body || {};
+  const account = accounts[req.accountKey];
+
+  if (!account) return res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return res.status(400).json({ success: false, message: 'Preencha todos os campos.' });
+  }
+
+  if (!bcrypt.compareSync(String(currentPassword), account.passwordHash)) {
+    return res.status(401).json({ success: false, message: 'Senha atual incorreta.' });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ success: false, message: 'As senhas não coincidem.' });
+  }
+
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) return res.status(400).json({ success: false, message: passwordError });
+
+  account.passwordHash = bcrypt.hashSync(String(newPassword), 10);
+  saveAccounts(accounts);
+
+  console.log(`[contas] Senha alterada: ${account.username} (${account.id})`);
+
+  // O token de sessão não carrega a senha — a sessão atual continua válida
+  // normalmente, sem precisar reemitir nada.
+  res.json({ success: true, message: 'Senha alterada com sucesso.' });
+});
+
+app.post('/api/account/avatar', requireAuth, (req, res) => {
+  const { avatarDataUrl } = req.body || {};
+  const account = accounts[req.accountKey];
+
+  if (!account) return res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+
+  const { error, mime, buffer } = validateAvatarDataUrl(avatarDataUrl);
+  if (error) return res.status(400).json({ success: false, message: error });
+
+  account.avatarDataUrl = `data:${mime};base64,${buffer.toString('base64')}`;
+  saveAccounts(accounts);
+
+  console.log(`[contas] Avatar atualizado: ${account.username} (${account.id})`);
+
+  res.json({ success: true, message: 'Avatar atualizado com sucesso.', account: publicAccount(account) });
+});
+
+app.post('/api/account/delete', requireAuth, (req, res) => {
+  const { currentPassword, confirm } = req.body || {};
+  const account = accounts[req.accountKey];
+
+  if (!account) return res.status(401).json({ success: false, message: 'Sessão inválida. Faça login novamente.' });
+  if (!currentPassword) {
+    return res.status(400).json({ success: false, message: 'Preencha todos os campos.' });
+  }
+
+  if (!bcrypt.compareSync(String(currentPassword), account.passwordHash)) {
+    return res.status(401).json({ success: false, message: 'Senha atual incorreta.' });
+  }
+
+  if (String(confirm || '').trim().toUpperCase() !== 'EXCLUIR') {
+    return res.status(400).json({ success: false, message: 'Digite EXCLUIR para confirmar.' });
+  }
+
+  delete accounts[req.accountKey];
+  saveAccounts(accounts);
+
+  console.log(`[contas] Conta excluída: ${account.username} (${account.id})`);
+
+  // Nada mais precisa ser feito para "derrubar a sessão": verifySessionToken
+  // já rejeita qualquer token cuja conta não exista mais em `accounts`, então
+  // o token atual (e qualquer socket que venha a reconectar com ele) passa a
+  // ser inválido automaticamente a partir de agora.
+  res.json({ success: true, message: 'Conta excluída com sucesso.' });
 });
 
 app.get('/', (_req, res) => {
